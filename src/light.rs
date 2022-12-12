@@ -63,7 +63,7 @@ impl SpotLight {
             point_light: PointLight::new_pi(
                 Vector3 {
                     x: 0.0,
-                    y: 1.5,
+                    y: 1.0,
                     z: 1.0,
                 },
                 Vector3 {
