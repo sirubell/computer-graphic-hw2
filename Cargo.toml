@@ -11,3 +11,4 @@ imgui = {version = "0.8.2", features = ["tables-api"]}
 imgui-glium-renderer = "0.8.2"
 imgui-winit-support = "0.8.2"
 cgmath = "0.18.0"
+tinyfiledialogs = "3.9.1"

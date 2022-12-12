@@ -1,7 +1,10 @@
 use std::{collections::HashMap, fs};
 
 use cgmath::{vec3, Vector2, Vector3};
-use glium::{uniforms, Display, IndexBuffer, Program, Surface, VertexBuffer};
+use glium::{
+    uniforms::{AsUniformValue, Uniforms, UniformsStorage},
+    Display, DrawParameters, IndexBuffer, Program, Surface, VertexBuffer,
+};
 
 #[derive(Copy, Clone, Debug)]
 struct VertexPTN {
@@ -56,22 +59,58 @@ impl SubMesh {
         }
     }
 
-    fn draw<T, U>(
+    fn add_uniforms<'a, T, R>(
         &self,
-        frame: &mut T,
+        uniforms: UniformsStorage<'a, T, R>,
+    ) -> UniformsStorage<
+        'a,
+        [f32; 3],
+        UniformsStorage<
+            'a,
+            [f32; 3],
+            UniformsStorage<'a, [f32; 3], UniformsStorage<'a, f32, UniformsStorage<'a, T, R>>>,
+        >,
+    >
+    where
+        T: AsUniformValue,
+        R: Uniforms,
+    {
+        let ns = self.material.ns;
+        let ka = <Vector3<f32> as Into<[f32; 3]>>::into(self.material.ka);
+        let kd = <Vector3<f32> as Into<[f32; 3]>>::into(self.material.kd);
+        let ks = <Vector3<f32> as Into<[f32; 3]>>::into(self.material.ks);
+
+        uniforms
+            .add("ns", ns)
+            .add("ka", ka)
+            .add("kd", kd)
+            .add("ks", ks)
+    }
+
+    fn draw<S, T, R>(
+        &self,
+        frame: &mut S,
         program: &Program,
-        uniforms: &U,
+        uniforms: UniformsStorage<T, R>,
     ) -> Result<(), glium::DrawError>
     where
-        T: Surface,
-        U: uniforms::Uniforms,
+        S: Surface,
+        T: AsUniformValue,
+        R: Uniforms,
     {
         frame.draw(
             &self.vertex_buffer,
             &self.index_buffer,
             &program,
-            uniforms,
-            &Default::default(),
+            &self.add_uniforms(uniforms),
+            &DrawParameters {
+                depth: glium::Depth {
+                    test: glium::DepthTest::IfLess,
+                    write: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
         )
     }
 }
@@ -326,18 +365,19 @@ impl TriangleMesh {
         Ok(())
     }
 
-    pub fn draw<T, U>(
+    pub fn draw<S, T, R>(
         &self,
-        frame: &mut T,
+        frame: &mut S,
         program: &Program,
-        uniforms: &U,
+        uniforms: UniformsStorage<T, R>,
     ) -> Result<(), glium::DrawError>
     where
-        T: Surface,
-        U: uniforms::Uniforms,
+        S: Surface,
+        T: AsUniformValue + Clone,
+        R: Uniforms + Clone,
     {
         for submesh in &self.submeshes {
-            submesh.draw(frame, program, uniforms)?;
+            submesh.draw(frame, program, uniforms.clone())?;
         }
         Ok(())
     }
