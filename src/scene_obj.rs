@@ -53,6 +53,7 @@ impl SceneObject {
 
     pub fn draw<S, T, R>(
         &self,
+        display: &Display,
         frame: &mut S,
         program: &Program,
         uniforms: UniformsStorage<T, R>,
@@ -62,7 +63,7 @@ impl SceneObject {
         T: AsUniformValue + Clone,
         R: Uniforms + Clone,
     {
-        self.mesh.draw(frame, program, uniforms)?;
+        self.mesh.draw(display, frame, program, uniforms)?;
         Ok(())
     }
 }

@@ -1,10 +1,11 @@
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, path::Path};
 
 use cgmath::{vec3, Vector2, Vector3};
 use glium::{
-    uniforms::{AsUniformValue, Uniforms, UniformsStorage},
-    Display, DrawParameters, IndexBuffer, Program, Surface, VertexBuffer,
+    uniforms::{AsUniformValue, MagnifySamplerFilter, Sampler, Uniforms, UniformsStorage},
+    Display, DrawParameters, IndexBuffer, Program, Surface, Texture2d, VertexBuffer,
 };
+use image::io::Reader;
 
 #[derive(Copy, Clone, Debug)]
 struct VertexPTN {
@@ -15,12 +16,13 @@ struct VertexPTN {
 
 glium::implement_vertex!(VertexPTN, position, normal, texcoord);
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 struct Material {
     ns: f32,
     ka: Vector3<f32>,
-    kd: Vector3<f32>,
+    kd: Option<Vector3<f32>>,
     ks: Vector3<f32>,
+    mapkd: Vec<Vec<(u8, u8, u8)>>,
 }
 
 struct SubMesh {
@@ -77,8 +79,11 @@ impl SubMesh {
     {
         let ns = self.material.ns;
         let ka = <Vector3<f32> as Into<[f32; 3]>>::into(self.material.ka);
-        let kd = <Vector3<f32> as Into<[f32; 3]>>::into(self.material.kd);
         let ks = <Vector3<f32> as Into<[f32; 3]>>::into(self.material.ks);
+        let kd = match self.material.kd {
+            Some(v) => <Vector3<f32> as Into<[f32; 3]>>::into(v),
+            None => [0.0, 0.0, 0.0],
+        };
 
         uniforms
             .add("ns", ns)
@@ -89,6 +94,7 @@ impl SubMesh {
 
     fn draw<S, T, R>(
         &self,
+        display: &Display,
         frame: &mut S,
         program: &Program,
         uniforms: UniformsStorage<T, R>,
@@ -98,6 +104,23 @@ impl SubMesh {
         T: AsUniformValue,
         R: Uniforms,
     {
+        use std::time::Instant;
+
+        let now = Instant::now();
+        let mapkd = if !self.material.mapkd.is_empty() {
+            Texture2d::new(display, self.material.mapkd.clone()).unwrap()
+        } else {
+            Texture2d::empty(display, 0, 0).unwrap()
+        };
+        let mapkd = mapkd
+            .sampled()
+            .magnify_filter(MagnifySamplerFilter::Linear);
+        let elasped = now.elapsed();
+        dbg!(elasped);
+
+        let uniforms = uniforms.add("mapkd", mapkd);
+        dbg!(mapkd);
+
         frame.draw(
             &self.vertex_buffer,
             &self.index_buffer,
@@ -274,7 +297,7 @@ impl TriangleMesh {
                 display,
                 &vertices[..],
                 &vertex_indices[attr.2[0]..attr.2[1]],
-                materials[attr.0],
+                materials[attr.0].clone(),
                 attr.1,
             ));
         }
@@ -297,6 +320,7 @@ impl TriangleMesh {
         let mut ka: Option<Vector3<f32>> = None;
         let mut kd: Option<Vector3<f32>> = None;
         let mut ks: Option<Vector3<f32>> = None;
+        let mut mapkd: Vec<Vec<(u8, u8, u8)>> = Vec::new();
 
         for mut line in file.lines() {
             if let Some(index) = line.find('#') {
@@ -315,10 +339,13 @@ impl TriangleMesh {
                                 Material {
                                     ns: ns.unwrap(),
                                     ka: ks.unwrap(),
-                                    kd: kd.unwrap(),
+                                    kd,
                                     ks: ks.unwrap(),
+                                    mapkd,
                                 },
                             );
+                            kd = None;
+                            mapkd = Vec::new();
                         }
 
                         mtl_name = Some(data.next().unwrap());
@@ -345,8 +372,32 @@ impl TriangleMesh {
                         let z: f32 = data.next().unwrap().parse().unwrap();
                         ks = Some(vec3(x, y, z))
                     }
+                    "map_Kd" => {
+                        let texture_path = data.next().unwrap();
+                        let mut parent_path = Path::new(file_path).to_path_buf();
+                        parent_path.pop();
+                        let texture_path = parent_path.join(texture_path);
+                        dbg!(&texture_path);
+                        let texture_image = Reader::open(texture_path)?.decode()?;
+                        let texture_image = texture_image.into_rgb8();
+
+                        let mut buffer: Vec<Vec<(u8, u8, u8)>> = Vec::new();
+                        for x in 0..texture_image.width() {
+                            buffer.push(Vec::new());
+                            for y in 0..texture_image.height() {
+                                let pixel = texture_image.get_pixel(x, y).clone();
+                                buffer
+                                    .last_mut()
+                                    .unwrap()
+                                    .push((pixel.0[0], pixel.0[1], pixel.0[2]));
+                            }
+                        }
+
+                        mapkd = buffer;
+                    }
                     _ => {
-                        unreachable!()
+                        // don't care
+                        // unreachable!()
                     }
                 }
             }
@@ -357,8 +408,9 @@ impl TriangleMesh {
             Material {
                 ns: ns.unwrap(),
                 ka: ka.unwrap(),
-                kd: kd.unwrap(),
+                kd,
                 ks: ks.unwrap(),
+                mapkd,
             },
         );
 
@@ -367,6 +419,7 @@ impl TriangleMesh {
 
     pub fn draw<S, T, R>(
         &self,
+        display: &Display,
         frame: &mut S,
         program: &Program,
         uniforms: UniformsStorage<T, R>,
@@ -377,7 +430,7 @@ impl TriangleMesh {
         R: Uniforms + Clone,
     {
         for submesh in &self.submeshes {
-            submesh.draw(frame, program, uniforms.clone())?;
+            submesh.draw(display, frame, program, uniforms.clone())?;
         }
         Ok(())
     }

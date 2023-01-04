@@ -46,7 +46,7 @@ fn main() {
 
     let mut last_frame = std::time::Instant::now();
 
-    let mesh = TriangleMesh::new(&display, "models/Soccer/Soccer.obj", true).unwrap();
+    let mesh = TriangleMesh::new(&display, "models/Ivysaur/Ivysaur.obj", true).unwrap();
     let mut scene_obj = SceneObject::new(mesh);
 
     let program = Program::from_source(
@@ -69,7 +69,7 @@ fn main() {
 
     let mut cur_rotation_y: f32 = 0.0;
     let rotate_dir_y: f32 = 1.0;
-    let rotate_step: f32 = 0.05;
+    let rotate_step: f32 = 0.5;
 
     let mut camera = Camera::new(aspect_ratio);
     let point_light = PointLight::new();
@@ -133,7 +133,7 @@ fn main() {
                     let uniforms = spot_light.add_uniforms(uniforms);
                     let uniforms = dir_light.add_uniforms(uniforms);
 
-                    scene_obj.draw(&mut frame, &program, uniforms).unwrap();
+                    scene_obj.draw(&display, &mut frame, &program, uniforms).unwrap();
                 }
                 {
                     let point_light_scene = SceneLight::new(&display, &point_light);

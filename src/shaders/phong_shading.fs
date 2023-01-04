@@ -2,6 +2,7 @@
 
 in vec3 i_position;
 in vec3 i_normal;
+in vec2 i_texcoord;
 
 out vec4 frag_color;
 
@@ -9,6 +10,7 @@ uniform vec3 camera_pos;
 
 uniform vec3 ka;
 uniform vec3 kd;
+uniform sampler2D mapkd;
 uniform vec3 ks;
 uniform float ns;
 
@@ -26,38 +28,39 @@ uniform float total_width;
 uniform vec3 dir_light_dir;
 uniform vec3 dir_light_radiance;
 
-vec3 diffuse(vec3 kd, vec3 i, vec3 n, vec3 light_dir);
-vec3 specular(vec3 ks, vec3 i, vec3 n, vec3 camera_dir, vec3 reflect_dir, float ns);
+vec3 diffuse(vec3 i, vec3 n, vec3 light_dir);
+vec3 specular(vec3 i, vec3 n, vec3 camera_dir, vec3 reflect_dir);
 vec3 point_light(vec3 point_light_pos, vec3 position, vec3 normal, vec3 camera_dir);
 vec3 spot_light(vec3 spot_light_pos, vec3 position, vec3 normal, vec3 camera_dir);
 vec3 dir_light(vec3 dir_light_dir, vec3 normal, vec3 camera_dir);
 
 
-vec3 diffuse(vec3 kd, vec3 i, vec3 n, vec3 light_dir) {
-    return kd * i * max(dot(n, light_dir), 0.0);
+vec3 diffuse(vec3 i, vec3 n, vec3 light_dir) {
+    return texture(mapkd, vec2(1.0 - i_texcoord.y, i_texcoord.x)).rgb * i * max(dot(n, light_dir), 0.0);
+    // return kd * i * max(dot(n, light_dir), 0.0);
 }
 
-vec3 specular(vec3 ks, vec3 i, vec3 n, vec3 camera_dir, vec3 reflect_dir, float ns) {
+vec3 specular(vec3 i, vec3 n, vec3 camera_dir, vec3 reflect_dir) {
     return ks * i * pow(max(dot(camera_dir, reflect_dir), 0.0), ns);
 }
 
 vec3 point_light(vec3 position, vec3 normal, vec3 camera_dir) {
     vec3 light_dir = normalize(point_light_pos - position);
-    vec3 reflect_dir = reflect(-light_dir, normal);
+    vec3 reflect_dir = normalize(reflect(-light_dir, normal));
 
     float distance = length(point_light_pos - position);
     float attenuation = 1.0 / (distance * distance);
     vec3 intensity = point_light_intensity * attenuation;
 
-    vec3 diffuse = diffuse(kd, intensity, normal, light_dir);
-    vec3 specular = specular(ks, intensity, normal, camera_dir, reflect_dir, ns);
+    vec3 diffuse = diffuse(intensity, normal, light_dir);
+    vec3 specular = specular(intensity, normal, camera_dir, reflect_dir);
 
     return diffuse + specular;
 }
 
 vec3 spot_light(vec3 position, vec3 normal, vec3 camera_dir) {
     vec3 light_dir = normalize(spot_light_pos - position);
-    vec3 reflect_dir = reflect(-light_dir, normal);
+    vec3 reflect_dir = normalize(reflect(-light_dir, normal));
 
     float cos_theta = dot(light_dir, normalize(-spot_light_dir));
     float epsilon = cos(radians(cutoff_start)) - cos(radians(total_width));
@@ -66,18 +69,18 @@ vec3 spot_light(vec3 position, vec3 normal, vec3 camera_dir) {
     float attenuation = 1.0 / (distance * distance);
     vec3 intensity = spot_light_intensity * clamp((cos_theta - cos(radians(total_width))) / epsilon, 0.0, 1.0)  * attenuation;
 
-    vec3 diffuse = diffuse(kd, intensity, normal, light_dir);
-    vec3 specular = specular(ks, intensity, normal, camera_dir, reflect_dir, ns);
+    vec3 diffuse = diffuse(intensity, normal, light_dir);
+    vec3 specular = specular(intensity, normal, camera_dir, reflect_dir);
 
     return diffuse + specular;
 }
 
 vec3 dir_light(vec3 normal, vec3 camera_dir) {
     vec3 light_dir = normalize(-dir_light_dir);
-    vec3 reflect_dir = reflect(-light_dir, normal);
+    vec3 reflect_dir = normalize(reflect(-light_dir, normal));
     
-    vec3 diffuse = diffuse(kd, dir_light_radiance, normal, light_dir);
-    vec3 specular = specular(ks, dir_light_radiance, normal, camera_dir, reflect_dir, ns);
+    vec3 diffuse = diffuse(dir_light_radiance, normal, light_dir);
+    vec3 specular = specular(dir_light_radiance, normal, camera_dir, reflect_dir);
 
     return diffuse + specular;
 }
